@@ -9,6 +9,7 @@ import io
 app = Flask(__name__)
 
 LLM_API_URL = "http://10.93.24.194:42005"
+LLM_API_KEY = "my-secret-api-key"  # Set your API key here if required
 
 # Proxy for accessing chess.com from Russia
 CHESSCOM_PROXIES = {
@@ -36,35 +37,7 @@ def fetch_chesscom_game(game_id, game_type="live"):
         "Accept": "application/json",
     }
 
-    # Step 1: Try the callback API
-    callback_url = f"https://www.chess.com/callback/{game_type}/game/{game_id}"
-    response = requests.get(callback_url, headers=headers, proxies=CHESSCOM_PROXIES, timeout=15)
-    
-    if response.status_code == 200:
-        try:
-            data = response.json()
-            if isinstance(data, dict) and "game" in data:
-                game_data = data["game"]
-                pgn_headers = game_data.get("pgnHeaders", {})
-                
-                if pgn_headers:
-                    pgn = _build_pgn_from_callback(game_data, game_id)
-                    metadata = {
-                        "white": pgn_headers.get("White", "?"),
-                        "black": pgn_headers.get("Black", "?"),
-                        "result": pgn_headers.get("Result", "?"),
-                        "white_elo": pgn_headers.get("WhiteElo", "?"),
-                        "black_elo": pgn_headers.get("BlackElo", "?"),
-                        "eco": pgn_headers.get("ECO", "?"),
-                        "termination": game_data.get("resultMessage", "?"),
-                        "time_control": pgn_headers.get("TimeControl", "?"),
-                        "date": pgn_headers.get("Date", "?"),
-                    }
-                    return pgn, metadata
-        except (json.JSONDecodeError, KeyError, TypeError) as e:
-            pass  # Fall through to archive search
-    
-    # Step 2: Search player archives
+    # Step 1: Fetch the game page to extract player info
     page_url = f"https://www.chess.com/game/{game_type}/{game_id}"
     response = requests.get(page_url, headers=headers, proxies=CHESSCOM_PROXIES, timeout=15)
     
@@ -73,6 +46,7 @@ def fetch_chesscom_game(game_id, game_type="live"):
     
     html_content = response.text
     
+    # Extract player usernames from meta description
     vs_pattern = r'content="(\S+)\s*\(\d+\)\s*vs\s*(\S+)\s*\(\d+\)'
     match = re.search(vs_pattern, html_content)
     
@@ -86,9 +60,10 @@ def fetch_chesscom_game(game_id, game_type="live"):
     white_username = match.group(1).rstrip('.,;:!?')
     black_username = match.group(2).rstrip('.,;:!?')
     
+    # Step 2: Search both players' archives for the full PGN
     for username in [white_username, black_username]:
         pgn = _search_archives(username, game_id, headers, game_type)
-        if pgn:
+        if pgn and '[Event' in pgn and '1.' in pgn:
             # Extract metadata from PGN
             game_obj = chess.pgn.read_game(io.StringIO(pgn))
             if game_obj:
@@ -107,112 +82,52 @@ def fetch_chesscom_game(game_id, game_type="live"):
                 metadata = {"white": white_username, "black": black_username, "result": "?"}
             return pgn, metadata
     
+    # Step 3: Fallback to callback API (metadata only, no moves)
+    callback_url = f"https://www.chess.com/callback/{game_type}/game/{game_id}"
+    response = requests.get(callback_url, headers=headers, proxies=CHESSCOM_PROXIES, timeout=15)
+    
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            if isinstance(data, dict) and "game" in data:
+                game_data = data["game"]
+                pgn_headers = game_data.get("pgnHeaders", {})
+                
+                if pgn_headers:
+                    pgn = _build_pgn_headers_only(pgn_headers, game_id, game_data)
+                    metadata = {
+                        "white": pgn_headers.get("White", "?"),
+                        "black": pgn_headers.get("Black", "?"),
+                        "result": pgn_headers.get("Result", "?"),
+                        "white_elo": pgn_headers.get("WhiteElo", "?"),
+                        "black_elo": pgn_headers.get("BlackElo", "?"),
+                        "eco": pgn_headers.get("ECO", "?"),
+                        "termination": game_data.get("resultMessage", "?"),
+                        "time_control": pgn_headers.get("TimeControl", "?"),
+                        "date": pgn_headers.get("Date", "?"),
+                    }
+                    return pgn, metadata
+        except (json.JSONDecodeError, KeyError, TypeError):
+            pass
+    
     raise Exception(
         f"Could not find game {game_id}. Players: {white_username} vs {black_username}. "
         f"The game may be very recent - wait a few minutes and try again."
     )
 
 
-def _build_pgn_from_callback(game_data, game_id):
-    """Build PGN from callback API, trying to decode moves."""
-    import chess
-    
-    game = game_data["game"]
-    pgn_headers = game.get("pgnHeaders", {})
-    move_list = game.get("moveList", "")
-    
-    # Try to decode moves
-    moves = _decode_movelist(move_list) if move_list else []
-    
-    board = chess.Board()
+def _build_pgn_headers_only(pgn_headers, game_id, game_data):
+    """Build minimal PGN with just headers for fallback."""
     pgn_lines = []
-    for key in ["Event", "Site", "Date", "White", "Black", "Result", "ECO", 
+    for key in ["Event", "Site", "Date", "White", "Black", "Result", "ECO",
                 "WhiteElo", "BlackElo", "TimeControl", "Termination"]:
         val = pgn_headers.get(key, "?")
         pgn_lines.append(f'[{key} "{val}"]')
     pgn_lines.append('')
-    
-    if moves:
-        move_text = ""
-        for i, move_uci in enumerate(moves):
-            try:
-                move = chess.Move.from_uci(move_uci)
-                if move in board.legal_moves:
-                    san = board.san(move)
-                    board.push(move)
-                    if i % 2 == 0:
-                        move_text += f"{i // 2 + 1}. {san} "
-                    else:
-                        move_text += f"{san} "
-            except Exception:
-                continue
-        pgn_lines.append(move_text.strip())
-    else:
-        pgn_lines.append(f"; Game ID: {game_id}")
-        pgn_lines.append(f"; Result: {game.get('resultMessage', '?')}")
-        pgn_lines.append(f"; Total plies: {pgn_headers.get('plyCount', '?')}")
-    
+    pgn_lines.append(f"; Game ID: {game_id}")
+    pgn_lines.append(f"; Result: {game_data.get('resultMessage', '?')}")
     pgn_lines.append(pgn_headers.get("Result", "*"))
     return '\n'.join(pgn_lines)
-
-
-def _decode_movelist(move_list):
-    """
-    Decode chess.com's moveList format.
-    Uses a compact encoding: each pair of chars = from/to square.
-    Character set: 0-9, a-z, A-Z, ?, !, ~ (64 chars for 64 squares)
-    """
-    import chess
-    
-    # The 64 characters map to squares 0-63 (a1-h8)
-    # Chess.com uses this specific character ordering
-    SQ = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ?!"
-    square_to_idx = {c: i for i, c in enumerate(SQ)}
-    
-    board = chess.Board()
-    moves = []
-    i = 0
-    
-    while i < len(move_list) - 1:
-        c1 = move_list[i]
-        c2 = move_list[i + 1]
-        
-        # Skip special markers
-        if c1 in '~!+#':
-            i += 1
-            continue
-        
-        if c1 in square_to_idx and c2 in square_to_idx:
-            from_sq = square_to_idx[c1]
-            to_sq = square_to_idx[c2]
-            
-            from_square = chess.square(from_sq % 8, from_sq // 8)
-            to_square = chess.square(to_sq % 8, to_sq // 8)
-            
-            # Find matching legal move
-            found = False
-            for move in list(board.legal_moves):
-                if move.from_square == from_square and move.to_square == to_square:
-                    moves.append(move.uci())
-                    board.push(move)
-                    found = True
-                    break
-            
-            # Try with promotions if not found
-            if not found and to_sq >= 56:  # 8th rank
-                for promo in [chess.QUEEN, chess.ROOK, chess.BISHOP, chess.KNIGHT]:
-                    move = chess.Move(from_square, to_square, promotion=promo)
-                    if move in board.legal_moves:
-                        moves.append(move.uci())
-                        board.push(move)
-                        found = True
-                        break
-            
-            i += 2
-        else:
-            i += 1
-    
-    return moves
 
 
 def _search_archives(username, game_id, headers, game_type="live"):
@@ -245,20 +160,19 @@ def _search_archives(username, game_id, headers, game_type="live"):
 
 def analyze_with_llm(pgn, metadata):
     """Send the game to the Qwen LLM for analysis."""
-    # Parse the game to get moves
-    game = chess.pgn.read_game(io.StringIO(pgn))
+    # Extract moves from PGN for the prompt
     moves_list = []
-    
-    if game:
-        board = game.board()
-        node = game
-        while node.variations:
-            next_node = node.variation(0)
-            move = next_node.move
-            if move:
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn))
+        if game:
+            # Use mainline_moves() to get moves in order
+            board = game.board()
+            for move in game.mainline_moves():
                 san = board.san(move)
-                moves_list.append(f"{board.fullmove_number}. {san}" if board.turn == chess.WHITE else f"{board.fullmove_number}... {san}")
+                moves_list.append(san)
                 board.push(move)
+    except Exception:
+        pass
     
     # Build the prompt
     prompt = f"""You are a chess grandmaster and coach. Analyze the following chess game.
@@ -289,10 +203,15 @@ Please provide a detailed analysis:
 Be specific with move numbers and explain your reasoning clearly."""
 
     try:
+        headers = {"Content-Type": "application/json"}
+        if LLM_API_KEY:
+            headers["Authorization"] = f"Bearer {LLM_API_KEY}"
+        
         response = requests.post(
             f"{LLM_API_URL}/v1/chat/completions",
+            headers=headers,
             json={
-                "model": "qwen",
+                "model": "coder-model",
                 "messages": [
                     {"role": "system", "content": "You are a chess grandmaster and expert coach."},
                     {"role": "user", "content": prompt}
@@ -300,7 +219,7 @@ Be specific with move numbers and explain your reasoning clearly."""
                 "temperature": 0.7,
                 "max_tokens": 4000
             },
-            timeout=120
+            timeout=600
         )
         
         if response.status_code == 200:

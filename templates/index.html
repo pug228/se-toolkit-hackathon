@@ -4,16 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Chess Game Analyzer</title>
-    
-    <!-- Chessboard.js CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.css">
-    
     <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
         
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
@@ -22,233 +14,131 @@
             color: #e0e0e0;
         }
         
-        .container {
-            max-width: 1400px;
-            margin: 0 auto;
-            padding: 20px;
-        }
+        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
         
-        header {
-            text-align: center;
-            padding: 30px 0;
-        }
-        
-        header h1 {
-            font-size: 2.5rem;
-            color: #fff;
-            text-shadow: 2px 2px 4px rgba(0,0,0,0.3);
-        }
-        
-        header p {
-            color: #a0a0a0;
-            margin-top: 10px;
-        }
+        header { text-align: center; padding: 30px 0; }
+        header h1 { font-size: 2.5rem; color: #fff; }
+        header p { color: #a0a0a0; margin-top: 10px; }
         
         .input-section {
             background: rgba(255,255,255,0.05);
             border-radius: 10px;
             padding: 25px;
             margin-bottom: 30px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
         }
         
-        .input-group {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
+        .input-group { display: flex; gap: 10px; flex-wrap: wrap; }
         
         .input-group input {
-            flex: 1;
-            min-width: 300px;
-            padding: 15px 20px;
-            font-size: 1rem;
-            border: 2px solid #3a3a5c;
-            border-radius: 8px;
-            background: #2a2a4a;
-            color: #fff;
-            transition: border-color 0.3s;
+            flex: 1; min-width: 300px;
+            padding: 15px 20px; font-size: 1rem;
+            border: 2px solid #3a3a5c; border-radius: 8px;
+            background: #2a2a4a; color: #fff;
         }
-        
-        .input-group input:focus {
-            outline: none;
-            border-color: #6c63ff;
-        }
-        
-        .input-group input::placeholder {
-            color: #6a6a8a;
-        }
+        .input-group input:focus { outline: none; border-color: #6c63ff; }
         
         .btn {
-            padding: 15px 40px;
-            font-size: 1rem;
-            font-weight: 600;
-            border: none;
-            border-radius: 8px;
-            cursor: pointer;
-            transition: all 0.3s;
+            padding: 15px 40px; font-size: 1rem; font-weight: 600;
+            border: none; border-radius: 8px; cursor: pointer;
         }
-        
         .btn-primary {
             background: linear-gradient(135deg, #6c63ff 0%, #4834d4 100%);
             color: #fff;
         }
-        
-        .btn-primary:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4);
-        }
-        
-        .btn-primary:disabled {
-            opacity: 0.5;
-            cursor: not-allowed;
-            transform: none;
-        }
+        .btn-primary:hover { box-shadow: 0 4px 12px rgba(108, 99, 255, 0.4); }
+        .btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
         
         .main-content {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 30px;
+            display: grid; grid-template-columns: 1fr 1fr; gap: 30px;
         }
-        
-        @media (max-width: 1024px) {
-            .main-content {
-                grid-template-columns: 1fr;
-            }
-        }
+        @media (max-width: 1024px) { .main-content { grid-template-columns: 1fr; } }
         
         .board-section {
             background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            border-radius: 10px; padding: 25px;
         }
         
+        #gameInfo {
+            text-align: center; margin-bottom: 15px;
+            padding: 10px; background: #2a2a4a; border-radius: 5px;
+        }
+        
+        /* Chess Board */
         #board {
-            width: 100%;
-            max-width: 500px;
+            width: 400px; height: 400px;
             margin: 0 auto;
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            grid-template-rows: repeat(8, 1fr);
+            border: 3px solid #3a3a5c;
+            border-radius: 4px;
         }
         
+        .square {
+            display: flex; align-items: center; justify-content: center;
+            font-size: 40px;
+            position: relative;
+            user-select: none;
+        }
+        .square.light { background: #f0d9b5; }
+        .square.dark { background: #b58863; }
+        
+        /* Move Controls */
         .move-controls {
-            display: flex;
-            gap: 10px;
-            justify-content: center;
-            margin-top: 20px;
-            flex-wrap: wrap;
+            display: flex; gap: 10px; justify-content: center;
+            margin-top: 20px; flex-wrap: wrap;
         }
-        
         .btn-move {
-            padding: 10px 20px;
-            background: #3a3a5c;
-            color: #fff;
-            border: none;
-            border-radius: 5px;
-            cursor: pointer;
+            padding: 10px 20px; background: #3a3a5c; color: #fff;
+            border: none; border-radius: 5px; cursor: pointer;
             font-size: 1.2rem;
-            transition: background 0.3s;
         }
-        
-        .btn-move:hover {
-            background: #4a4a7c;
-        }
-        
-        .btn-move:disabled {
-            opacity: 0.3;
-            cursor: not-allowed;
-        }
+        .btn-move:hover { background: #4a4a7c; }
+        .btn-move:disabled { opacity: 0.3; cursor: not-allowed; }
         
         .move-info {
-            text-align: center;
-            margin-top: 15px;
-            padding: 10px;
-            background: #2a2a4a;
-            border-radius: 5px;
-            min-height: 50px;
+            text-align: center; margin-top: 15px; padding: 10px;
+            background: #2a2a4a; border-radius: 5px; min-height: 50px;
         }
         
+        /* Analysis */
         .analysis-section {
             background: rgba(255,255,255,0.05);
-            border-radius: 10px;
-            padding: 25px;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
-            max-height: 700px;
-            overflow-y: auto;
+            border-radius: 10px; padding: 25px;
+            max-height: 700px; overflow-y: auto;
         }
+        .analysis-section h2 { margin-bottom: 20px; color: #6c63ff; }
+        .analysis-content { white-space: pre-wrap; line-height: 1.8; }
         
-        .analysis-section h2 {
-            margin-bottom: 20px;
-            color: #6c63ff;
-        }
-        
-        .analysis-content {
-            white-space: pre-wrap;
-            line-height: 1.8;
-        }
-        
-        .analysis-content p {
-            margin-bottom: 15px;
-        }
-        
-        .loading {
-            display: none;
-            text-align: center;
-            padding: 40px;
-        }
-        
-        .loading.active {
-            display: block;
-        }
-        
+        /* Loading */
+        .loading { display: none; text-align: center; padding: 40px; }
+        .loading.active { display: block; }
         .spinner {
-            border: 4px solid #3a3a5c;
-            border-top: 4px solid #6c63ff;
-            border-radius: 50%;
-            width: 50px;
-            height: 50px;
-            animation: spin 1s linear infinite;
-            margin: 0 auto 20px;
+            border: 4px solid #3a3a5c; border-top: 4px solid #6c63ff;
+            border-radius: 50%; width: 50px; height: 50px;
+            animation: spin 1s linear infinite; margin: 0 auto 20px;
         }
-        
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
         
         .error-message {
-            background: #ff4757;
-            color: #fff;
-            padding: 15px;
-            border-radius: 8px;
-            margin-top: 15px;
-            display: none;
+            background: #ff4757; color: #fff; padding: 15px;
+            border-radius: 8px; margin-top: 15px; display: none;
         }
-        
-        .error-message.active {
-            display: block;
-        }
-        
-        .status-message {
-            text-align: center;
-            padding: 15px;
-            color: #a0a0a0;
-        }
+        .error-message.active { display: block; }
+        .status-message { text-align: center; padding: 15px; color: #a0a0a0; }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
             <h1>♟️ Chess Game Analyzer</h1>
-            <p>Paste a chess.com game URL and get AI-powered analysis from a chess grandmaster</p>
+            <p>Paste a chess.com game URL and get AI-powered analysis</p>
         </header>
         
         <div class="input-section">
             <div class="input-group">
-                <input 
-                    type="text" 
-                    id="gameUrl" 
-                    placeholder="Paste chess.com game URL (e.g., https://www.chess.com/game/daily/1234567890)"
-                >
+                <input type="text" id="gameUrl" 
+                    placeholder="Paste chess.com game URL (e.g., https://www.chess.com/game/live/138272501960)">
                 <button class="btn btn-primary" id="analyzeBtn">Analyze Game</button>
             </div>
             <div class="error-message" id="errorMessage"></div>
@@ -256,252 +146,231 @@
         
         <div class="loading" id="loading">
             <div class="spinner"></div>
-            <p>Analyzing your game with AI grandmaster...</p>
-            <p style="font-size: 0.9rem; color: #6a6a8a;">This may take a minute</p>
+            <p>Analyzing your game with AI...</p>
         </div>
         
         <div class="main-content" id="mainContent" style="display: none;">
             <div class="board-section">
-                <div id="gameInfo" style="text-align: center; margin-bottom: 15px; padding: 10px; background: #2a2a4a; border-radius: 5px; display: none;">
+                <div id="gameInfo" style="display: none;">
                     <strong id="gameTitle"></strong>
                 </div>
                 <div id="board"></div>
                 <div class="move-controls">
-                    <button class="btn-move" id="startBtn" title="Go to start">⏮</button>
-                    <button class="btn-move" id="prevBtn" title="Previous move">◀</button>
-                    <button class="btn-move" id="nextBtn" title="Next move">▶</button>
-                    <button class="btn-move" id="endBtn" title="Go to end">⏭</button>
+                    <button class="btn-move" id="startBtn" title="Start">⏮</button>
+                    <button class="btn-move" id="prevBtn" title="Previous">◀</button>
+                    <button class="btn-move" id="nextBtn" title="Next">▶</button>
+                    <button class="btn-move" id="endBtn" title="End">⏭</button>
                 </div>
-                <div class="move-info" id="moveInfo">
-                    Use the controls to navigate through the game
-                </div>
+                <div class="move-info" id="moveInfo">Use controls to navigate</div>
             </div>
             
             <div class="analysis-section">
                 <h2>📊 AI Analysis</h2>
-                <div class="analysis-content" id="analysisContent">
-                    Analysis will appear here after processing
-                </div>
+                <div class="analysis-content" id="analysisContent"></div>
             </div>
         </div>
         
-        <div class="status-message" id="statusMessage">
-            Enter a chess.com game URL to get started
-        </div>
+        <div class="status-message" id="statusMessage">Enter a chess.com URL to start</div>
     </div>
     
-    <!-- jQuery (required for chessboard.js) -->
-    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
-    <!-- Chessboard.js -->
-    <script src="https://unpkg.com/@chrisoakman/chessboardjs@1.0.0/dist/chessboard-1.0.0.min.js"></script>
-    <!-- Chess.js for game logic -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
-    
     <script>
-        $(document).ready(function() {
-            let board = null;
-            let game = new Chess();
-            let moves = [];
-            let currentMoveIndex = -1;
-            
-            // Initialize chessboard
-            const config = {
-                draggable: false,
-                position: 'start',
-                pieceTheme: 'https://chessboardjs.com/img/chesspieces/wikipedia/{piece}.png'
-            };
-            board = Chessboard('board', config);
-            
-            // Make responsive
-            function resizeBoard() {
-                const container = $('#board');
-                const width = Math.min(container.width(), 500);
-                container.css('width', width);
-                board.resize();
-            }
-            
-            $(window).resize(resizeBoard);
-            setTimeout(resizeBoard, 100);
-            
-            // UI Elements
-            const $gameUrl = $('#gameUrl');
-            const $analyzeBtn = $('#analyzeBtn');
-            const $loading = $('#loading');
-            const $mainContent = $('#mainContent');
-            const $errorMessage = $('#errorMessage');
-            const $statusMessage = $('#statusMessage');
-            const $moveInfo = $('#moveInfo');
-            const $analysisContent = $('#analysisContent');
-            const $startBtn = $('#startBtn');
-            const $prevBtn = $('#prevBtn');
-            const $nextBtn = $('#nextBtn');
-            const $endBtn = $('#endBtn');
-            
-            function showError(msg) {
-                $errorMessage.text(msg).addClass('active');
-                setTimeout(() => $errorMessage.removeClass('active'), 5000);
-            }
-            
-            function updateMoveControls() {
-                $startBtn.prop('disabled', currentMoveIndex <= -1);
-                $prevBtn.prop('disabled', currentMoveIndex <= -1);
-                $nextBtn.prop('disabled', currentMoveIndex >= moves.length - 1);
-                $endBtn.prop('disabled', currentMoveIndex >= moves.length - 1);
-            }
-            
-            function updateMoveInfo() {
-                if (currentMoveIndex < 0) {
-                    $moveInfo.text('Starting position');
-                    return;
+    (function() {
+        // Unicode chess pieces
+        const PIECES = {
+            'K': '♔', 'Q': '♕', 'R': '♖', 'B': '♗', 'N': '♘', 'P': '♙',
+            'k': '♚', 'q': '♛', 'r': '♜', 'b': '♝', 'n': '♞', 'p': '♟'
+        };
+        
+        // Parse FEN to board array
+        function fenToBoard(fen) {
+            const parts = fen.split(' ')[0];
+            const rows = parts.split('/');
+            const board = [];
+            for (const row of rows) {
+                const boardRow = [];
+                for (const ch of row) {
+                    if (ch >= '1' && ch <= '8') {
+                        for (let i = 0; i < parseInt(ch); i++) boardRow.push(null);
+                    } else {
+                        boardRow.push(ch);
+                    }
                 }
-                
-                const move = moves[currentMoveIndex];
-                const moveNumber = Math.floor(currentMoveIndex / 2) + 1;
-                const side = currentMoveIndex % 2 === 0 ? 'White' : 'Black';
-                $moveInfo.text(`${side} (${moveNumber}): ${move.san || move.uci}`);
+                board.push(boardRow);
             }
+            return board;
+        }
+        
+        // Render board from FEN
+        function renderBoard(fen) {
+            const board = fenToBoard(fen);
+            const boardEl = document.getElementById('board');
+            boardEl.innerHTML = '';
             
-            function goToStart() {
-                game.reset();
-                currentMoveIndex = -1;
-                board.position(game.fen());
-                updateMoveInfo();
-                updateMoveControls();
-            }
-            
-            function goToPrevious() {
-                if (currentMoveIndex > -1) {
-                    game.undo();
-                    currentMoveIndex--;
-                    board.position(game.fen());
-                    updateMoveInfo();
-                    updateMoveControls();
-                }
-            }
-            
-            function goToNext() {
-                if (currentMoveIndex < moves.length - 1) {
-                    currentMoveIndex++;
-                    const move = moves[currentMoveIndex];
-                    game.move(move.uci);
-                    board.position(game.fen());
-                    updateMoveInfo();
-                    updateMoveControls();
-                }
-            }
-            
-            function goToEnd() {
-                while (currentMoveIndex < moves.length - 1) {
-                    goToNext();
-                }
-            }
-            
-            // Event listeners
-            $analyzeBtn.click(async function() {
-                const url = $gameUrl.val().trim();
-                
-                if (!url) {
-                    showError('Please enter a chess.com game URL');
-                    return;
-                }
-                
-                if (!url.includes('chess.com/game/')) {
-                    showError('URL must be from chess.com/game/...');
-                    return;
-                }
-                
-                // Show loading
-                $analyzeBtn.prop('disabled', true);
-                $loading.addClass('active');
-                $mainContent.hide();
-                $statusMessage.hide();
-                $errorMessage.removeClass('active');
-                
-                try {
-                    const response = await fetch('/api/analyze', {
-                        method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json'
-                        },
-                        body: JSON.stringify({ url: url })
-                    });
+            for (let r = 0; r < 8; r++) {
+                for (let c = 0; c < 8; c++) {
+                    const sq = document.createElement('div');
+                    const isLight = (r + c) % 2 === 0;
+                    sq.className = 'square ' + (isLight ? 'light' : 'dark');
                     
-                    const data = await response.json();
-                    
-                    if (!response.ok) {
-                        throw new Error(data.error || 'Analysis failed');
+                    const piece = board[r][c];
+                    if (piece && PIECES[piece]) {
+                        sq.textContent = PIECES[piece];
                     }
                     
-                    // Process the game
-                    game = new Chess();
-                    moves = data.moves || [];
-                    currentMoveIndex = -1;
-                    board.position(game.fen());
-                    
-                    // Show game info
-                    const meta = data.metadata || {};
-                    const gameTitle = `${meta.white || '?'} (${meta.white_elo || '?'}) vs ${meta.black || '?'} (${meta.black_elo || '?'}) - ${meta.result || '?'}`;
-                    $('#gameTitle').text(gameTitle);
-                    $('#gameInfo').show();
-                    
-                    // Show analysis
-                    $analysisContent.html(formatAnalysis(data.analysis));
-                    
-                    // Show main content
-                    $loading.removeClass('active');
-                    $mainContent.css('display', 'grid');
-                    updateMoveInfo();
-                    updateMoveControls();
-                    resizeBoard();
-                    
-                } catch (error) {
-                    $loading.removeClass('active');
-                    $statusMessage.show();
-                    showError(error.message);
-                } finally {
-                    $analyzeBtn.prop('disabled', false);
+                    boardEl.appendChild(sq);
                 }
-            });
+            }
+        }
+        
+        // State
+        let moves = [];
+        let currentMoveIndex = -1;
+        let startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
+        
+        // Elements
+        const $ = id => document.getElementById(id);
+        const analyzeBtn = $('analyzeBtn');
+        const loading = $('loading');
+        const mainContent = $('mainContent');
+        const statusMessage = $('statusMessage');
+        const errorMessage = $('errorMessage');
+        const moveInfo = $('moveInfo');
+        const analysisContent = $('analysisContent');
+        const gameInfo = $('gameInfo');
+        const gameTitle = $('gameTitle');
+        const gameUrlInput = $('gameUrl');
+        
+        function showError(msg) {
+            errorMessage.textContent = msg;
+            errorMessage.classList.add('active');
+            setTimeout(() => errorMessage.classList.remove('active'), 5000);
+        }
+        
+        function updateControls() {
+            $('startBtn').disabled = currentMoveIndex <= -1;
+            $('prevBtn').disabled = currentMoveIndex <= -1;
+            $('nextBtn').disabled = currentMoveIndex >= moves.length - 1;
+            $('endBtn').disabled = currentMoveIndex >= moves.length - 1;
+        }
+        
+        function updateMoveInfo() {
+            if (currentMoveIndex < 0) {
+                moveInfo.textContent = 'Starting position';
+                return;
+            }
+            const move = moves[currentMoveIndex];
+            const moveNum = Math.floor(currentMoveIndex / 2) + 1;
+            const side = currentMoveIndex % 2 === 0 ? 'White' : 'Black';
+            moveInfo.textContent = `${side} (${moveNum}): ${move.san}`;
+        }
+        
+        function goToStart() {
+            currentMoveIndex = -1;
+            renderBoard(startFen);
+            updateMoveInfo();
+            updateControls();
+        }
+        
+        function goToPrev() {
+            if (currentMoveIndex > -1) {
+                currentMoveIndex--;
+                const fen = currentMoveIndex < 0 ? startFen : moves[currentMoveIndex].fen;
+                renderBoard(fen);
+                updateMoveInfo();
+                updateControls();
+            }
+        }
+        
+        function goToNext() {
+            if (currentMoveIndex < moves.length - 1) {
+                currentMoveIndex++;
+                renderBoard(moves[currentMoveIndex].fen);
+                updateMoveInfo();
+                updateControls();
+            }
+        }
+        
+        function goToEnd() {
+            if (moves.length > 0) {
+                currentMoveIndex = moves.length - 1;
+                renderBoard(moves[currentMoveIndex].fen);
+                updateMoveInfo();
+                updateControls();
+            }
+        }
+        
+        // Event listeners
+        $('startBtn').addEventListener('click', goToStart);
+        $('prevBtn').addEventListener('click', goToPrev);
+        $('nextBtn').addEventListener('click', goToNext);
+        $('endBtn').addEventListener('click', goToEnd);
+        
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowLeft') goToPrev();
+            else if (e.key === 'ArrowRight') goToNext();
+            else if (e.key === 'Home') goToStart();
+            else if (e.key === 'End') goToEnd();
+        });
+        
+        analyzeBtn.addEventListener('click', async () => {
+            const url = gameUrlInput.value.trim();
+            if (!url) { showError('Please enter a chess.com game URL'); return; }
+            if (!url.includes('chess.com/game/')) { showError('URL must be from chess.com'); return; }
             
-            $startBtn.click(goToStart);
-            $prevBtn.click(goToPrevious);
-            $nextBtn.click(goToNext);
-            $endBtn.click(goToEnd);
+            analyzeBtn.disabled = true;
+            loading.classList.add('active');
+            mainContent.style.display = 'none';
+            statusMessage.style.display = 'none';
+            errorMessage.classList.remove('active');
             
-            // Keyboard shortcuts
-            $(document).keydown(function(e) {
-                if (e.key === 'ArrowLeft') {
-                    goToPrevious();
-                } else if (e.key === 'ArrowRight') {
-                    goToNext();
-                } else if (e.key === 'Home') {
-                    goToStart();
-                } else if (e.key === 'End') {
-                    goToEnd();
-                }
-            });
-            
-            function formatAnalysis(text) {
-                // Simple markdown-like formatting
-                return text
-                    .split('\n')
-                    .map(line => {
-                        if (line.startsWith('# ')) {
-                            return `<h3>${line.substring(2)}</h3>`;
-                        } else if (line.startsWith('## ')) {
-                            return `<h4>${line.substring(3)}</h4>`;
-                        } else if (line.startsWith('- ') || line.startsWith('* ')) {
-                            return `<div style="margin-left: 20px;">• ${line.substring(2)}</div>`;
-                        } else if (line.match(/^\d+\./)) {
-                            return `<strong>${line}</strong>`;
-                        } else if (line.trim() === '') {
-                            return '<br>';
-                        }
-                        return line;
-                    })
-                    .join('\n');
+            try {
+                const response = await fetch('/api/analyze', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url })
+                });
+                
+                const data = await response.json();
+                if (!response.ok) throw new Error(data.error || 'Analysis failed');
+                
+                moves = data.moves || [];
+                currentMoveIndex = -1;
+                renderBoard(startFen);
+                
+                const meta = data.metadata || {};
+                gameTitle.textContent = `${meta.white || '?'} (${meta.white_elo || '?'}) vs ${meta.black || '?'} (${meta.black_elo || '?'}) - ${meta.result || '?'}`;
+                gameInfo.style.display = 'block';
+                
+                analysisContent.innerHTML = formatAnalysis(data.analysis);
+                
+                loading.classList.remove('active');
+                mainContent.style.display = 'grid';
+                updateMoveInfo();
+                updateControls();
+                
+            } catch (error) {
+                loading.classList.remove('active');
+                statusMessage.style.display = 'block';
+                showError(error.message);
+            } finally {
+                analyzeBtn.disabled = false;
             }
         });
+        
+        function formatAnalysis(text) {
+            return text.split('\n').map(line => {
+                if (line.startsWith('# ')) return `<h3>${line.substring(2)}</h3>`;
+                if (line.startsWith('## ')) return `<h4>${line.substring(3)}</h4>`;
+                if (line.startsWith('- ') || line.startsWith('* ')) return `<div style="margin-left:20px;">• ${line.substring(2)}</div>`;
+                if (/^\d+\./.test(line)) return `<strong>${line}</strong>`;
+                if (line.trim() === '') return '<br>';
+                return line;
+            }).join('\n');
+        }
+        
+        // Init
+        renderBoard(startFen);
+    })();
     </script>
 </body>
 </html>
