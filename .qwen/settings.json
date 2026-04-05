@@ -72,7 +72,26 @@
       "Bash(moves_decoded.append)",
       "Bash(docker-compose *)",
       "Bash(docker compose down)",
-      "Bash(docker compose up *)"
+      "Bash(docker compose up *)",
+      "Bash(pacman *)",
+      "Bash(sudo *)",
+      "Bash(docker exec *)",
+      "Bash(docker compose build *)",
+      "Bash(docker images *)",
+      "Bash(docker ps *)",
+      "Bash(docker compose *)",
+      "Bash(sleep *)",
+      "Bash(jobs *)",
+      "Bash(sys.path.insert)",
+      "Bash(pgn *)",
+      "Bash(game *)",
+      "Bash(io.stringio)",
+      "Bash(sys.exit)",
+      "Bash(engine_path *)",
+      "Bash(engine *)",
+      "Bash(engine_path)",
+      "Bash(result *)",
+      "Bash(engine.quit)"
     ]
   },
   "$version": 3

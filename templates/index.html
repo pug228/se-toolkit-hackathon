@@ -83,6 +83,43 @@
         .square.light { background: #f0d9b5; }
         .square.dark { background: #b58863; }
         
+        .piece {
+            line-height: 1;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+        }
+        .piece.white-piece { color: #fff; text-shadow: 0 0 2px #000, 0 0 2px #000, 0 1px 2px rgba(0,0,0,0.5); }
+        .piece.black-piece { color: #1a1a1a; text-shadow: 0 1px 2px rgba(0,0,0,0.3); }
+        
+        /* Evaluation Badges */
+        .eval-badge {
+            display: inline-block;
+            padding: 3px 10px;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .eval-brilliant { background: #2563eb; color: #fff; }
+        .eval-excellent { background: #16a34a; color: #fff; }
+        .eval-good { background: #65a30d; color: #fff; }
+        .eval-book { background: #7c3aed; color: #fff; }
+        .eval-inaccuracy { background: #d97706; color: #fff; }
+        .eval-mistake { background: #dc2626; color: #fff; }
+        .eval-blunder { background: #991b1b; color: #fff; animation: pulse-red 2s infinite; }
+        
+        @keyframes pulse-red {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.8; }
+        }
+        
+        .eval-reason {
+            font-size: 0.85rem;
+            color: #a0a0a0;
+            margin-top: 4px;
+            font-style: italic;
+        }
+        
         /* Move Controls */
         .move-controls {
             display: flex; gap: 10px; justify-content: center;
@@ -214,7 +251,11 @@
                     
                     const piece = board[r][c];
                     if (piece && PIECES[piece]) {
-                        sq.textContent = PIECES[piece];
+                        const span = document.createElement('span');
+                        span.className = 'piece';
+                        span.classList.add(piece === piece.toUpperCase() ? 'white-piece' : 'black-piece');
+                        span.textContent = PIECES[piece];
+                        sq.appendChild(span);
                     }
                     
                     boardEl.appendChild(sq);
@@ -224,6 +265,7 @@
         
         // State
         let moves = [];
+        let evaluations = [];
         let currentMoveIndex = -1;
         let startFen = 'rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1';
         
@@ -255,13 +297,31 @@
         
         function updateMoveInfo() {
             if (currentMoveIndex < 0) {
-                moveInfo.textContent = 'Starting position';
+                moveInfo.innerHTML = 'Starting position';
                 return;
             }
             const move = moves[currentMoveIndex];
             const moveNum = Math.floor(currentMoveIndex / 2) + 1;
             const side = currentMoveIndex % 2 === 0 ? 'White' : 'Black';
-            moveInfo.textContent = `${side} (${moveNum}): ${move.san}`;
+            
+            let html = `<div>${side} (${moveNum}): <strong>${move.san}</strong></div>`;
+            
+            // Show Stockfish evaluation if available
+            const eval_ = evaluations[currentMoveIndex];
+            if (eval_) {
+                const cat = eval_.category;
+                const reason = eval_.reason;
+                const score = eval_.score || '';
+                html += `<div style="margin-top:6px;">
+                    <span class="eval-badge eval-${cat}">${cat}</span>
+                    ${score ? `<span style="margin-left:8px;font-size:0.85rem;color:#a0a0a0;">⚖ ${score}</span>` : ''}
+                </div>`;
+                if (reason) {
+                    html += `<div class="eval-reason">${reason}</div>`;
+                }
+            }
+            
+            moveInfo.innerHTML = html;
         }
         
         function goToStart() {
@@ -334,6 +394,7 @@
                 if (!response.ok) throw new Error(data.error || 'Analysis failed');
                 
                 moves = data.moves || [];
+                evaluations = data.evaluations || [];
                 currentMoveIndex = -1;
                 renderBoard(startFen);
                 

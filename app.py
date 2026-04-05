@@ -3,8 +3,10 @@ import json
 import requests
 from flask import Flask, render_template, request, jsonify
 import chess
+import chess.engine
 import chess.pgn
 import io
+import os
 
 app = Flask(__name__)
 
@@ -158,14 +160,13 @@ def _search_archives(username, game_id, headers, game_type="live"):
     return None
 
 
-def analyze_with_llm(pgn, metadata):
-    """Send the game to the Qwen LLM for analysis."""
+def _analyze_with_llm(pgn, metadata):
+    """Send the game to the Qwen LLM for commentary."""
     # Extract moves from PGN for the prompt
     moves_list = []
     try:
         game = chess.pgn.read_game(io.StringIO(pgn))
         if game:
-            # Use mainline_moves() to get moves in order
             board = game.board()
             for move in game.mainline_moves():
                 san = board.san(move)
@@ -173,34 +174,49 @@ def analyze_with_llm(pgn, metadata):
                 board.push(move)
     except Exception:
         pass
+
+    # Build the prompt - request structured per-move analysis
+    moves_str = '\n'.join([f"Move {i+1}: {m}" for i, m in enumerate(moves_list)])
     
-    # Build the prompt
-    prompt = f"""You are a chess grandmaster and coach. Analyze the following chess game.
+    prompt = f"""You are a chess grandmaster and coach. Analyze the following game move by move.
 
 Game Info:
 - White: {metadata.get('white', '?')} (ELO: {metadata.get('white_elo', '?')})
 - Black: {metadata.get('black', '?')} (ELO: {metadata.get('black_elo', '?')})
 - Result: {metadata.get('result', '?')}
 - Opening: {metadata.get('eco', '?')}
-- Time Control: {metadata.get('time_control', '?')}
-- Termination: {metadata.get('termination', '?')}
-
-PGN:
-{pgn}
 
 Moves:
-{', '.join(moves_list)}
+{moves_str}
 
-Please provide a detailed analysis:
-1. **Opening Analysis** - What opening was played? Was it handled correctly?
-2. **Key Moments** - Identify 3-5 critical positions that determined the game
-3. **Mistakes & Blunders** - Point out bad moves by both sides with better alternatives
-4. **Tactical Opportunities** - Were there any tactics missed (forks, pins, skewers, etc.)?
-5. **Strategic Assessment** - Positional strengths and weaknesses
-6. **Endgame** (if applicable) - How was the endgame handled?
-7. **Lessons** - What can both players learn from this game?
+Provide TWO things:
 
-Be specific with move numbers and explain your reasoning clearly."""
+1. **Move-by-move evaluation** - For EACH move, classify it into exactly ONE category:
+   - **Brilliant** - Exceptional, hard-to-find move
+   - **Excellent** - Very strong move
+   - **Good** - Solid, reasonable move
+   - **Inaccuracy** - Slightly suboptimal but not terrible
+   - **Mistake** - Significant error
+   - **Blunder** - Major error losing material or advantage
+   - **Book** - Standard opening theory move
+
+2. **Overall game analysis** with:
+   - Opening assessment
+   - Key turning points
+   - Critical mistakes with better alternatives
+   - Endgame notes
+   - Lessons for both players
+
+Format your response EXACTLY like this:
+
+EVALUATIONS:
+Move 1: Good - [brief reason]
+Move 2: Book - [brief reason]
+Move 3: Blunder - [brief reason]
+... (one line per move, same number as moves above)
+
+ANALYSIS:
+[Your detailed game analysis here]"""
 
     try:
         headers = {"Content-Type": "application/json"}
@@ -224,11 +240,216 @@ Be specific with move numbers and explain your reasoning clearly."""
         
         if response.status_code == 200:
             data = response.json()
-            return data["choices"][0]["message"]["content"]
+            raw = data["choices"][0]["message"]["content"]
+            return parse_llm_response(raw)
         else:
             raise Exception(f"LLM API returned status {response.status_code}: {response.text}")
     except requests.exceptions.ConnectionError:
         raise Exception(f"Cannot connect to LLM API at {LLM_API_URL}. Please ensure the server is running.")
+
+
+def parse_llm_response(raw):
+    """
+    Parse LLM response into evaluations list and analysis text.
+    Expected format:
+    EVALUATIONS:
+    Move 1: Good - reason
+    ...
+    ANALYSIS:
+    text...
+    """
+    evaluations = []
+    analysis_text = raw
+    
+    eval_section = False
+    analysis_section = False
+    
+    for line in raw.split('\n'):
+        stripped = line.strip()
+        
+        if stripped.startswith('EVALUATIONS:'):
+            eval_section = True
+            analysis_section = False
+            continue
+        elif stripped.startswith('ANALYSIS:'):
+            eval_section = False
+            analysis_section = True
+            continue
+        
+        if eval_section:
+            # Parse "Move N: Category - reason"
+            match = re.match(r'Move\s+(\d+):\s*(\w+)\s*-?\s*(.*)', stripped)
+            if match:
+                move_num = int(match.group(1))
+                category = match.group(2).strip()
+                reason = match.group(3).strip()
+                evaluations.append({
+                    "move": move_num - 1,  # 0-indexed
+                    "category": normalize_category(category),
+                    "reason": reason
+                })
+    
+    # If no EVALUATIONS section found, use entire response as analysis
+    if not evaluations:
+        analysis_text = raw
+    
+    return analysis_text, evaluations
+
+
+def normalize_category(cat):
+    """Normalize category names to a fixed set."""
+    cat_lower = cat.lower()
+    mapping = {
+        'brilliant': 'brilliant',
+        'excellent': 'excellent',
+        'good': 'good',
+        'book': 'book',
+        'standard': 'book',
+        'opening': 'book',
+        'inaccuracy': 'inaccuracy',
+        'inaccurate': 'inaccuracy',
+        'mistake': 'mistake',
+        'error': 'mistake',
+        'blunder': 'blunder',
+        'blundered': 'blunder',
+    }
+    return mapping.get(cat_lower, 'good')
+
+
+def evaluate_with_stockfish(pgn, time_limit=0.5):
+    """
+    Use Stockfish to evaluate each position and classify moves.
+    Returns list of evaluations with categories based on centipawn loss.
+    """
+    import logging
+    stockfish_path = _find_stockfish()
+    logging.info(f"Stockfish path: {stockfish_path}")
+    
+    if not stockfish_path:
+        logging.warning("Stockfish not found")
+        return None
+    
+    try:
+        game = chess.pgn.read_game(io.StringIO(pgn))
+        if not game:
+            logging.warning("Failed to parse PGN")
+            return None
+        
+        evaluations = []
+        board = game.board()
+        
+        with chess.engine.SimpleEngine.popen_uci(stockfish_path) as engine:
+            for move in game.mainline_moves():
+                side_to_move = board.turn
+                
+                result = engine.analyse(board, chess.engine.Limit(time=time_limit))
+                pv = result.get("pv", [])
+                best_move = pv[0] if pv else move
+                
+                pov_score = result["score"].pov(side_to_move)
+                if pov_score.is_mate():
+                    best_cp = 10000 if pov_score.mate() > 0 else -10000
+                else:
+                    best_cp = pov_score.score()
+                
+                board.push(move)
+                
+                result2 = engine.analyse(board, chess.engine.Limit(time=time_limit))
+                pov_score2 = result2["score"].pov(side_to_move)
+                if pov_score2.is_mate():
+                    actual_cp = 10000 if pov_score2.mate() > 0 else -10000
+                else:
+                    actual_cp = pov_score2.score()
+                
+                # Cap cp_loss at 500 for meaningful classification
+                # (beyond that, position is already completely lost)
+                cp_loss = min(500, max(0, best_cp - actual_cp))
+                
+                # Classify the move
+                is_book = board.fullmove_number <= 10 and cp_loss < 20
+                category, reason = _classify_move(cp_loss, board.turn, move, best_move, is_book)
+                
+                evaluations.append({
+                    "category": category,
+                    "reason": reason,
+                    "cp_loss": cp_loss,
+                    "score": _format_score(result2["score"])
+                })
+        
+        logging.info(f"Generated {len(evaluations)} evaluations")
+        return evaluations
+    except Exception as e:
+        import traceback
+        logging.error(f"Stockfish error: {e}\n{traceback.format_exc()}")
+        return None
+
+
+def _find_stockfish():
+    """Find stockfish binary on the system."""
+    candidates = [
+        "/usr/games/stockfish",      # Debian/Ubuntu package location
+        "/usr/bin/stockfish",
+        "/usr/local/bin/stockfish",
+        "stockfish",
+    ]
+    for path in candidates:
+        if os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    import shutil
+    return shutil.which("stockfish")
+
+
+def _calc_centipawn_loss(board, before_score, after_score):
+    """Calculate centipawn loss for the side that just moved."""
+    # Convert scores to perspective of side that just moved
+    turn = board.turn  # WHITE or BLACK - this is the side that will move NEXT
+    # The side that just moved is the OPPOSITE
+    moved_side = not turn
+    
+    def cp_for_pov(score, pov):
+        return score.relative.score() if pov else -score.relative.score()
+    
+    before_cp = before_score.pov(moved_side).score()
+    after_cp = after_score.pov(moved_side).score()
+    
+    # Clamp mate scores
+    if before_cp > 10000: before_cp = 10000
+    if before_cp < -10000: before_cp = -10000
+    if after_cp > 10000: after_cp = 10000
+    if after_cp < -10000: after_cp = -10000
+    
+    loss = max(0, before_cp - after_cp)
+    return loss
+
+
+def _classify_move(cp_loss, turn, move, best_move, is_book):
+    """Classify a move based on centipawn loss."""
+    if is_book:
+        return "book", f"Standard opening theory move"
+    
+    if move == best_move and cp_loss < 5:
+        return "excellent", "Best move according to engine"
+    
+    if cp_loss <= 15:
+        return "excellent", f"Very strong move (loss: {cp_loss}cp)"
+    elif cp_loss <= 50:
+        return "good", f"Solid move (loss: {cp_loss}cp)"
+    elif cp_loss <= 100:
+        return "inaccuracy", f"Slightly suboptimal, better alternatives exist (loss: {cp_loss}cp)"
+    elif cp_loss <= 250:
+        return "mistake", f"Significant error, could be punished (loss: {cp_loss}cp)"
+    elif cp_loss <= 500:
+        return "blunder", f"Major error, likely losing material or position (loss: {cp_loss}cp)"
+    else:
+        return "blunder", f"Critical blunder, position severely damaged (loss: {cp_loss}cp)"
+
+
+def _format_score(score):
+    """Format score for display. score is a PovScore from engine.analyse()."""
+    rel = score.relative
+    if rel.is_mate():
+        return f"M{abs(rel.mate())}"
+    return f"{rel.score() / 100:+.2f}"
 
 
 @app.route("/")
@@ -258,7 +479,18 @@ def analyze():
         return jsonify({"error": f"Failed to fetch game: {str(e)}"}), 400
     
     try:
-        analysis = analyze_with_llm(pgn, metadata)
+        # Use Stockfish for accurate move evaluations
+        stockfish_evals = evaluate_with_stockfish(pgn, time_limit=0.1)
+        
+        # Use LLM for commentary on critical moments only
+        analysis_text = ""
+        try:
+            analysis_text = _analyze_with_llm(pgn, metadata)
+        except Exception as e:
+            pass  # Continue without LLM analysis if it fails
+        
+        # Merge Stockfish evaluations with the moves
+        evaluations = stockfish_evals or []
     except Exception as e:
         return jsonify({"error": f"Failed to analyze game: {str(e)}"}), 500
     
@@ -281,7 +513,8 @@ def analyze():
     
     return jsonify({
         "pgn": pgn,
-        "analysis": analysis,
+        "analysis": analysis_text,
+        "evaluations": evaluations,
         "metadata": metadata,
         "moves": board_positions
     })
