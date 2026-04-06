@@ -1,5 +1,7 @@
 import re
 import json
+import logging
+import traceback
 import requests
 import time
 import threading
@@ -10,6 +12,8 @@ import chess.pgn
 import io
 import os
 import database as db
+
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 
@@ -650,13 +654,12 @@ def analyze_stream():
         return Response('data: {"step":"error","error":"Could not extract game ID"}\n\n',
                        mimetype="text/event-stream")
 
-    session_id = f"{game_id}_{int(time.time())}"
-
     def generate_progress():
         """Run analysis in background and stream progress."""
         import queue
         q = queue.Queue()
         _analysis_progress[session_id] = q
+        logging.info(f"Starting analysis with session_id: {session_id}")
 
         def run_analysis():
             try:
@@ -697,10 +700,13 @@ def analyze_stream():
 
                 # Save to database
                 try:
+                    logging.info(f"Saving analysis: session={session_id}, game={game_id}")
                     db.save_analysis(session_id, url, game_id, metadata, pgn,
                                     analysis_text, evaluations, board_positions)
+                    logging.info("Analysis saved successfully")
                 except Exception as e:
-                    pass  # Non-critical
+                    logging.error(f"Failed to save analysis: {e}")
+                    logging.error(traceback.format_exc())
 
                 q.put({"step": "done", "progress": 100, "data": {
                     "pgn": pgn,

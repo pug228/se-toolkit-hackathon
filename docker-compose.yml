@@ -6,7 +6,11 @@ services:
     ports:
       - "5000:5000"
     volumes:
-      - .:/app
+      - ./app.py:/app/app.py
+      - ./database.py:/app/database.py
+      - ./templates:/app/templates
+      - ./requirements.txt:/app/requirements.txt
+      - ./Dockerfile:/app/Dockerfile
       - analysis-data:/app/data
     environment:
       - ANALYSIS_DB=/app/data/analyses.db
